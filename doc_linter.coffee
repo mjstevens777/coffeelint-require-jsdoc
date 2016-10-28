@@ -171,7 +171,7 @@ module.exports = class DocLinter
 
     if not comment? or comment.name isnt 'Comment'
       return {
-        message: "#{name} is undocumented"
+        message: "#{name} missing a documentation block comment"
         node: element.node
       }
 
