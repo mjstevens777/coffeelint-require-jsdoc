@@ -16,12 +16,16 @@ class SearchableAstNode
     if @parent?
       ###*
       # The chain of names from the root to this node, for example:
-      # Block.Class.Block.Value.Obj.Assign.Value.Literal
+      # Block.Class.Block.Value.Obj.Assign.Value.PropertyName
       # @property path {String}
       ###
       @path = "#{@parent.path}.#{@name}"
     else
       @path = @name
+    # msg = @path
+    # if @node.value? and typeof @node.value is 'string'
+    #   msg += ': ' + @node.value
+    # console.log(msg)
 
     ###*
     # @property children {SearchableAstNode[]}
@@ -69,8 +73,8 @@ class SearchableAstNode
       results = results.concat child.search(pattern)
     return results
 
-# Method: Class.Block.Value.Obj.Assign.(Value.Literal, Code.Block)
-# Property: Class.Block.Value.Obj.Assign.(Value.Literal, Value)
+# Method: Class.Block.Value.Obj.Assign.(Value.PropertyName, Code.Block)
+# Property: Class.Block.Value.Obj.Assign.(Value.PropertyName, Value)
 
 ###*
 # @class DocLinter
@@ -101,18 +105,34 @@ module.exports = class DocLinter
     # Search for methods/properties, and classes
     assignments = searchable_node.search /Class.Block.Value.Obj.Assign$/
     klasses = searchable_node.search(/Class$/)
+    # Search for Ember objects
+    ember_extends = searchable_node.search(/Assign.Call.Value.Access.PropertyName$/)
+    ember_klasses = []
+    for extension in ember_extends
+      if extension.node.value is 'extend'
+        klass = extension.parent.parent.parent.parent
+        klasses.push klass
+        path = '^' + klass.path + '.Call.Value.Obj.Assign' + '$'
+        assignments = assignments.concat klass.search(path)
+
+
+
 
     # Filter assignments into methods and properties
     methods = []
     properties = []
     for assignment in assignments
       continue unless assignment.children[0]?.name is 'Value'
-      continue unless assignment.children[0]?.children[0]?.name is 'Literal'
+      continue unless assignment.children[0]?.children[0]?.name is 'PropertyName'
 
       if assignment.children[1]?.name is 'Code'
         methods.push assignment
 
       if assignment.children[1]?.name is 'Value'
+        properties.push assignment
+
+      # Computed properties
+      if assignment.children[1]?.name is 'Call'
         properties.push assignment
 
     # Follow config.types setting
@@ -183,6 +203,6 @@ module.exports = class DocLinter
 
     unless comment.node.comment.indexOf('@') >= 0
       return {
-        "message": "Docs for #{name} missing markup"
+        message: "Docs for #{name} missing markup"
         node: comment.node
       }
