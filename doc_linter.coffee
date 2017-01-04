@@ -111,6 +111,11 @@ module.exports = class DocLinter
     for extension in ember_extends
       if extension.node.value is 'extend'
         klass = extension.parent.parent.parent.parent
+        name = klass.node.variable?.base?.value
+        # Make sure class name is upper camel case, otherwise it is probably
+        # not a class.
+        unless typeof name is 'string' and name.match(/[A-Z]([a-z]|$)/)
+          continue
         klasses.push klass
         path = '^' + klass.path + '.Call.Value.Obj.Assign' + '$'
         assignments = assignments.concat klass.search(path)
@@ -185,24 +190,28 @@ module.exports = class DocLinter
   # @return {Object} An object with `message` and `node`, or null
   ###
   lintDocumentedElement: (element, comment, name) ->
-    # Ignore private elements according to settings
-    if name[0] is '_' and @astApi.config[@rule.name].ignore_private
+    try
+      # Ignore private elements according to settings
+      if name[0] is '_' and @astApi.config[@rule.name].ignore_private
+        return null
+
+      if not comment? or comment.name isnt 'Comment'
+        return {
+          message: "#{name} missing a documentation block comment"
+          node: element.node
+        }
+
+      unless comment.node.comment[0] is '*'
+        return {
+          message: "Docs for #{name} missing starting * character"
+          node: comment.node
+        }
+
+      unless comment.node.comment.indexOf('@') >= 0
+        return {
+          message: "Docs for #{name} missing markup"
+          node: comment.node
+        }
+    catch
+      # Failed to parse element, probably not something we want to lint
       return null
-
-    if not comment? or comment.name isnt 'Comment'
-      return {
-        message: "#{name} missing a documentation block comment"
-        node: element.node
-      }
-
-    unless comment.node.comment[0] is '*'
-      return {
-        message: "Docs for #{name} missing starting * character"
-        node: comment.node
-      }
-
-    unless comment.node.comment.indexOf('@') >= 0
-      return {
-        message: "Docs for #{name} missing markup"
-        node: comment.node
-      }
